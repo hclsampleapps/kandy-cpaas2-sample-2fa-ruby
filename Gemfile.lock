@@ -44,7 +44,7 @@ PLATFORMS
   x64-mingw32
 
 DEPENDENCIES
-  cpaas-sdk (~> 1.0)
+  cpaas-sdk (~> 1.1.0)
   dotenv
   httparty
   pry

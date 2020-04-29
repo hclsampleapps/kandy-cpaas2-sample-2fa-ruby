@@ -5,6 +5,7 @@ require 'cpaas-sdk'
 
 require './helper'
 
+
 class App < Sinatra::Application
   enable :sessions
 
@@ -20,67 +21,139 @@ class App < Sinatra::Application
   end
 
   get '/' do
-    type = params['success'] ? 'success' : 'error'
-    message = params[type]
-
-    erb :index, locals: { alert: { message: message, type: type } }
+    redirect '/login'
   end
 
-  post '/send' do
-    #
-    # The method create_message would send an sms when the 'type' attribute is 'SMS'
-    #
-    response = Cpaas::Conversation.create_message({
-      type: Cpaas::Conversation.types[:SMS],
-      destination_address: params['number'],
-      message: params['message'],
-      sender_address: ENV['PHONE_NUMBER']
+  get '/login' do
+    # If user is logged in and trying to access login page, redirect to dashboard.
+    return redirect '/dashboard' if is_logged_in? session
+
+    set_default_state(session)
+
+    erb :login, layout: :index
+  end
+
+  post '/login' do
+    if valid_credentials? params
+      # If login credentials are valid, send_code method is used to request 2FA code
+      # to the phone number as destination_address.
+      #
+      # If a valid response is received, the code_id present in the response is set in the session.
+      # This code_id is eventually used when the 2FA code (received in the phone number) needs to be verified.
+      # Once the code_id is set, the user is redirected to the code verification page
+      # where the user is prompted to enter the code received in the phone number.
+      #
+      # If an error is raised by send_code, it is caught in the catch block and the user is
+      # redirected to the login page with the received error message as an alert.
+      set_credentials_verified(session)
+      redirect '/verify'
+    else
+      # If login credentials do not match with credentials present in .env, login page is re-rendered with error alert
+      erb :login, layout: :index, locals: { alert: { message: 'Invalid username or password', type: 'error' } }
+    end
+  end
+
+  post '/sendtwofactorsms' do
+    response = Cpaas::Twofactor.send_code({
+        destination_address: ENV['PHONE_NUMBER'],
+        message: 'Your verification code: {code}',
+        method: 'sms'
+     })
+    
+    if response[:exception_id]
+      # Here something went wrong either with the server or proper parameters were not passed.
+      # Received error message is echoed back to the UI as error alert.
+      return erb :verify, layout: :index, locals: { alert: { message: error_message(response), type: 'error' } }
+    end
+    session[:code_id] = response[:code_id]
+    erb :verify, layout: :index, locals: { alert: { message: 'Twofactor verification code sent successfully', type: 'success' } }
+  end
+
+
+
+post '/sendtwofactorEmail' do
+    
+    response = Cpaas::Twofactor.send_code({
+        destination_address: ENV['DESTINATION_EMAIL'],
+        message: 'Your verification code: {code}',
+        method: 'email',
+        subject: 'Twofactor verification'
+      })
+    
+    if response[:exception_id]
+      # Here something went wrong either with the server or proper parameters were not passed.
+      # Received error message is echoed back to the UI as error alert.
+      return erb :verify, layout: :index, locals: { alert: { message: error_message(response), type: 'error' } }
+    end
+    session[:code_id] = response[:code_id]
+    erb :verify, layout: :index, locals: { alert: { message: 'Twofactor verification code sent successfully', type: 'success' } }
+ end
+
+
+
+
+  get '/verify' do
+    # If logged in and trying to access login page, redirect to dashboard.
+    return redirect '/dashboard' if is_logged_in? session
+    # If login credentials are not verified but tries to access the code verification page, user is redirected.
+    return redirect '/logout' if !is_credentials_verified? session
+
+    # If the login credentials are verified, user is shown code verification page.
+    erb :verify, layout: :index
+  end
+
+  post '/verify' do
+     # The 2FA code entered in the UI is passed to the verify_code along with codeId,
+     # which was saved from the response of send_code method.
+     #
+     # There are two valid response for verify_code method.
+     #
+     # Type 1 - The 2FA code is successfully verified.
+     # {
+     #  verified: true,
+     #  message: 'Verified'
+     # }
+     #
+     # Type 2 - The 2FA code pass is either incorrect or the code has expired
+     # (The expiry of the code can be changed by passing expiry param in the send_code. Ref - Documentation)
+     # {
+     #  verified: false,
+     #  message: 'Code expired or invalid'
+     # }
+
+    response = Cpaas::Twofactor.verify_code({
+      code_id: session[:code_id],
+      verification_code: params['code']
     })
 
-    puts response
+    if response[:exception_id]
+      # Here something went wrong either with the server or proper parameters were not passed.
+      # Received error message is echoed back to the UI as error alert.
+      return erb :verify, layout: :index, locals: { alert: { message: error_message(response), type: 'error' } }
+    end
 
-    return redirect "/?error=#{error_message(response)}" if response[:exception_id]
-
-    redirect '/?success=Success'
+    if response[:verified]
+      login session
+      # The code is verified and redirected to dashboard/portal/protected area of app.
+      return redirect '/dashboard'
+    else
+      # The code is invalid and error message received from server is shown as error alert.
+      return erb :verify, layout: :index, locals: { alert: { message: response[:message], type: 'error' } }
+    end
   end
 
-  post '/subscribe' do
-    #
-    # The subscribe method would enable a notification subscription for a purchased number (destination) and the
-    # webhook_url is the public POST endpoint where notifications would be received. For this exable the
-    # '/webhook' endpoint is enabled for the incoming notification.
-    #
+  get '/dashboard' do
+    # If not logged in, redirected to logout.
+    return redirect '/logout' if !is_logged_in? session
 
-    response = Cpaas::Conversation.subscribe({
-      type: Cpaas::Conversation.types[:SMS],
-      destination_address: ENV['PHONE_NUMBER'],
-      webhook_url: "#{params['webhook']}/webhook"
-    })
-
-    puts response
-
-    return redirect "/?error=#{error_message(response)}" if response[:exception_id]
-
-    redirect '/?success=Created subscription'
+    # Login criteria is fulfilled, renders dashboard/portal/protected area of app
+    erb :dashboard, layout: :index
   end
 
-  post '/webhook' do
-    body = JSON.parse request.body.read
+  get '/logout' do
+    # Logged in session is cleared
+    logout session
 
-    #
-    # The Cpaas::Notification.parse will parse the received notification and will return a
-    # simplified version of th notification to consume
-    #
-
-    notification = Cpaas::Notification.parse(body)
-
-    add_notification(notification) # Helper method, check helper.rb
-
-    status 200
-  end
-
-  get '/notifications' do
-    content_type :json
-    notifications.to_json # Helper method, check helper.rb
+    redirect '/login'
   end
 end

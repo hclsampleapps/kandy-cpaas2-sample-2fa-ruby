@@ -1,4 +1,4 @@
-<% if locals.dig(:alert, :message) %>
+<% if locals[:alert] %>
   <div class="alert alert-<%= alert[:type] %>">
     <p><%= alert[:message] %></p>
   </div>
