@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+    <title>2FA</title>
+</head>
+
+<body>
+    <h2>Two-Factor Authentication (2FA) App</h2>
+    
+    <div class="main">
+        <%= yield %>
+    </div>
+    
+	<%= erb :alert, locals: locals %>
+
+</body>
+
+</html>

@@ -1,0 +1,34 @@
+<div id="verify">
+   <div>
+        <h4>Authenticate via</h4>
+        <ul>
+            <form action="/sendtwofactorsms" method="post">
+                <li>
+                    <button type="submit">SMS</button>
+                </li>
+            </form>
+            <form action="/sendtwofactorEmail" method="post">
+                <li>
+                    <button type="submit">Email</button>
+                </li>
+            </form>
+        </ul>
+
+    </div>
+    <hr>
+    <div>
+        <form action="/verify" method="post">
+            <h4>Verify OTP</h4>
+            <div>
+                <ul>
+                    <li>
+                        <label>Enter OTP:</label>
+                        <input type="text" id="code" placeholder="123456" maxlength="6" name="code" />
+                    </li>
+                </ul>
+                <button type="submit">Verify</button>
+            </div>
+        </form>
+    </div>
+
+</div>
