@@ -12,7 +12,7 @@ Example :
 		CLIENT_SECRET=123abcde-a123-1234-abcd-ab12345c67d8
 		BASE_URL=https://oauth-cpaas.att.com
 		PHONE_NUMBER=+16543219870
-		DESTINATION_EMAIL=test@gmail.com
+		DESTINATION_EMAIL=test@domain.com
 
 2. To install dependencies, run:
 bundle install
